@@ -410,11 +410,11 @@ PyObject *
 PyFunction_GetCode(PyObject *op)
 {
     PyObject *code = NULL;
-    Py_BEGIN_CRITICAL_SECTION(op);
     if (!PyFunction_Check(op)) {
         PyErr_BadInternalCall();
         return NULL;
     }
+    Py_BEGIN_CRITICAL_SECTION(op);
     code = ((PyFunctionObject *) op) ->func_code;
     Py_END_CRITICAL_SECTION();
     return code;
@@ -424,11 +424,11 @@ PyObject *
 PyFunction_GetGlobals(PyObject *op)
 {
     PyObject *globals = NULL;
-    Py_BEGIN_CRITICAL_SECTION(op);
     if (!PyFunction_Check(op)) {
         PyErr_BadInternalCall();
         return NULL;
     }
+    Py_BEGIN_CRITICAL_SECTION(op);
     globals = ((PyFunctionObject *) op) ->func_globals;
     Py_END_CRITICAL_SECTION();
     return globals;
@@ -438,11 +438,11 @@ PyObject *
 PyFunction_GetModule(PyObject *op)
 {
     PyObject *module = NULL;
-    Py_BEGIN_CRITICAL_SECTION(op);
     if (!PyFunction_Check(op)) {
         PyErr_BadInternalCall();
         return NULL;
     }
+    Py_BEGIN_CRITICAL_SECTION(op);
     module = ((PyFunctionObject *) op) ->func_module;
     Py_END_CRITICAL_SECTION();
     return module;
@@ -452,11 +452,11 @@ PyObject *
 PyFunction_GetDefaults(PyObject *op)
 {
     PyObject *defaults = NULL;
-    Py_BEGIN_CRITICAL_SECTION(op);
     if (!PyFunction_Check(op)) {
         PyErr_BadInternalCall();
         return NULL;
     }
+    Py_BEGIN_CRITICAL_SECTION(op);
     defaults = ((PyFunctionObject *) op) ->func_defaults;
     Py_END_CRITICAL_SECTION();
     return defaults;
@@ -465,7 +465,6 @@ PyFunction_GetDefaults(PyObject *op)
 int
 PyFunction_SetDefaults(PyObject *op, PyObject *defaults)
 {
-    Py_BEGIN_CRITICAL_SECTION(op);
     if (!PyFunction_Check(op)) {
         PyErr_BadInternalCall();
         return -1;
@@ -479,6 +478,7 @@ PyFunction_SetDefaults(PyObject *op, PyObject *defaults)
         PyErr_SetString(PyExc_SystemError, "non-tuple default args");
         return -1;
     }
+    Py_BEGIN_CRITICAL_SECTION(op);
     handle_func_event(PyFunction_EVENT_MODIFY_DEFAULTS,
                       (PyFunctionObject *) op, defaults);
     _PyFunction_ClearVersion((PyFunctionObject *)op);
@@ -500,11 +500,15 @@ PyFunction_SetVectorcall(PyFunctionObject *func, vectorcallfunc vectorcall)
 PyObject *
 PyFunction_GetKwDefaults(PyObject *op)
 {
+    PyObject * kwdefaults = NULL;
     if (!PyFunction_Check(op)) {
         PyErr_BadInternalCall();
         return NULL;
     }
-    return FT_ATOMIC_LOAD_PTR(((PyFunctionObject *) op) -> func_kwdefaults);
+    Py_BEGIN_CRITICAL_SECTION(op);
+    kwdefaults = ((PyFunctionObject *) op) -> func_kwdefaults;
+    Py_END_CRITICAL_SECTION();
+    return kwdefaults;
 }
 
 int
@@ -536,11 +540,15 @@ PyFunction_SetKwDefaults(PyObject *op, PyObject *defaults)
 PyObject *
 PyFunction_GetClosure(PyObject *op)
 {
+    PyObject* closure = NULL;
     if (!PyFunction_Check(op)) {
         PyErr_BadInternalCall();
         return NULL;
     }
-    return FT_ATOMIC_LOAD_PTR(((PyFunctionObject *) op) -> func_closure);
+    Py_BEGIN_CRITICAL_SECTION(op);
+    closure = ((PyFunctionObject *) op) -> func_closure;
+    Py_END_CRITICAL_SECTION();
+    return closure;
 }
 
 int
