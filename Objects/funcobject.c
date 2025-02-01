@@ -500,7 +500,7 @@ PyFunction_SetVectorcall(PyFunctionObject *func, vectorcallfunc vectorcall)
 PyObject *
 PyFunction_GetKwDefaults(PyObject *op)
 {
-    PyObject * kwdefaults = NULL;
+    PyObject *kwdefaults = NULL;
     if (!PyFunction_Check(op)) {
         PyErr_BadInternalCall();
         return NULL;
@@ -540,7 +540,7 @@ PyFunction_SetKwDefaults(PyObject *op, PyObject *defaults)
 PyObject *
 PyFunction_GetClosure(PyObject *op)
 {
-    PyObject* closure = NULL;
+    PyObject *closure = NULL;
     if (!PyFunction_Check(op)) {
         PyErr_BadInternalCall();
         return NULL;
