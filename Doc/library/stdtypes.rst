@@ -2841,6 +2841,17 @@ objects.
          optional *sep* and *bytes_per_sep* parameters to insert separators
          between bytes in the hex output.
 
+   .. method:: resize(size)
+
+      Resize the :class:`bytearray` using :ref:`Memory Management <memory>` APIs
+      to contain *size* bytes. Data from the existing :class:`bytearray` will be
+      kept up to *size*. If :class:`bytearray` needs to grow, all new bytes will
+      be zeroed / set to the NULL byte (``b"\0"``). One byte beyond *size* will
+      always be set to NULL to ensure the :class:`bytearray` is always NULL
+      terminated regardless of contents.
+
+      .. versionadded:: next
+
 Since bytearray objects are sequences of integers (akin to a list), for a
 bytearray object *b*, ``b[0]`` will be an integer, while ``b[0:1]`` will be
 a bytearray object of length 1.  (This contrasts with text strings, where

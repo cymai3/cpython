@@ -1359,6 +1359,40 @@ class ByteArrayTest(BaseBytesTest, unittest.TestCase):
         b = by("Hello, world")
         self.assertEqual(re.findall(br"\w+", b), [by("Hello"), by("world")])
 
+    def test_resize(self):
+        ba = bytearray(b'abcdef')
+        self.assertIsNone(ba.resize(3))
+        self.assertEqual(ba, bytearray(b'abc'))
+        self.assertIsNone(ba.resize(10))
+        self.assertEqual(len(ba), 10)
+        # Bytes beyond set values must be cleared.
+        self.assertEqual(ba, bytearray(b'abc\0\0\0\0\0\0\0'))
+        expected_bytearray = bytearray(b'abcdeabcde')
+        ba[3:10] = b'deabcde'
+        self.assertEqual(ba, expected_bytearray)
+        self.assertIsNone(ba.resize(2**20))
+        self.assertEqual(len(ba), 2**20)
+        self.assertEqual(ba[:10], expected_bytearray)
+        self.assertEqual(ba[10:], bytearray(b'\0' * (2 ** 20 - 10)))
+        self.assertIsNone(ba.resize(0))
+        self.assertEqual(ba, bytearray())
+        self.assertIsNone(ba.resize(10))
+        self.assertEqual(ba, bytearray(b'\0' * 10))
+
+        ba = ByteArraySubclass(b'abcdef')
+        self.assertIsNone(ba.resize(3))
+        self.assertEqual(ba, bytearray(b'abc'))
+
+        # Check arguments
+        self.assertRaises(TypeError, lambda: bytearray().resize())
+        self.assertRaises(TypeError, lambda: bytearray().resize(10, 10))
+
+        self.assertRaises(BufferError, lambda: bytearray().resize(-1))
+        self.assertRaises(BufferError, lambda: bytearray().resize(-200))
+        self.assertRaises(MemoryError, lambda: bytearray().resize(sys.maxsize))
+        self.assertRaises(MemoryError, lambda: bytearray(1000).resize(sys.maxsize))
+
+
     def test_setitem(self):
         def setitem_as_mapping(b, i, val):
             b[i] = val
