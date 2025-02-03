@@ -36,6 +36,7 @@ with test_tools.imports_under_tool("cases_generator"):
     import parser
     from stack import Local, Stack
     import tier1_generator
+    import tier1_tail_call_generator
     import opcode_metadata_generator
     import optimizer_generator
 
@@ -458,7 +459,11 @@ class TestGeneratedCases(unittest.TestCase):
             INSTRUCTION_STATS(OP3);
             static_assert(INLINE_CACHE_ENTRIES_OP1 == 0, "incorrect cache size");
             _PyStackRef res;
-            DEOPT_IF(xxx, OP1);
+            if (xxx) {
+                UPDATE_MISS_STATS(OP1);
+                assert(_PyOpcode_Deopt[opcode] == (OP1));
+                goto PREDICTED_OP1;
+            }
             res = Py_None;
             stack_pointer[-1] = res;
             DISPATCH();
@@ -1811,6 +1816,129 @@ class TestGeneratedCases(unittest.TestCase):
             goto my_label_3;
         }
         """
+
+class TestGeneratedTailCallHandlers(unittest.TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.maxDiff = None
+
+        self.temp_dir = tempfile.gettempdir()
+        self.temp_input_filename = os.path.join(self.temp_dir, "input.txt")
+        self.temp_output_filename = os.path.join(self.temp_dir, "output.txt")
+        self.temp_labels_output_filename = os.path.join(self.temp_dir, "labels_output.txt")
+
+    def tearDown(self) -> None:
+        for filename in [
+            self.temp_input_filename,
+            self.temp_output_filename,
+            self.temp_labels_output_filename,
+        ]:
+            try:
+                os.remove(filename)
+            except Exception:
+                pass
+        super().tearDown()
+
+    def run_cases_test(self, input: str, expected: str, expected_labels: str):
+        with open(self.temp_input_filename, "w+") as temp_input:
+            temp_input.write(parser.BEGIN_MARKER)
+            temp_input.write(input)
+            temp_input.write(parser.END_MARKER)
+            temp_input.flush()
+
+        with handle_stderr():
+            tier1_tail_call_generator.generate_tier1_from_files(
+                [self.temp_input_filename], self.temp_output_filename, self.temp_labels_output_filename, False
+            )
+
+        with open(self.temp_output_filename) as temp_output:
+            lines = temp_output.read()
+            _, rest = lines.split(tier1_generator.INSTRUCTION_START_MARKER)
+            instructions, _ = rest.split(tier1_generator.INSTRUCTION_END_MARKER)
+
+        with open(self.temp_labels_output_filename) as temp_output:
+            lines = temp_output.readlines()
+            while lines and lines[0].startswith(("// ", "#", "    #", "\n")):
+                lines.pop(0)
+            while lines and lines[-1].startswith(("#", "\n")):
+                lines.pop(-1)
+        actual_labels = "".join(lines)
+
+        self.assertEqual(instructions.strip(), expected.strip())
+        self.assertEqual(actual_labels.strip(), expected_labels.strip())
+
+    def test_basic(self):
+        input = """
+        inst(OP, (--)) {
+            SPAM();
+        }
+        """
+        output = """
+Py_PRESERVE_NONE_CC static PyObject *_TAIL_CALL_OP(TAIL_CALL_PARAMS) {
+    {
+        frame->instr_ptr = next_instr;
+        next_instr += 1;
+        INSTRUCTION_STATS(OP);
+        SPAM();
+    }
+    DISPATCH();
+}
+        """
+        output_labels = ""
+        self.run_cases_test(input, output, output_labels)
+
+    def test_label_transformed(self):
+        """This tests that the labels and their gotos/DISPATCH get transformed to tail calls in the
+        tail-calling interpreter, while staying the same/becoming an entry call in the normal interpreter.
+        """
+        input = """
+        inst(OP, (--)) {
+            SPAM();
+        }
+
+        label(hello) {
+            EGGS();
+            if (x) {
+                goto baz;
+            }
+            DISPATCH();
+        }
+        """
+        output = """
+Py_PRESERVE_NONE_CC static PyObject *_TAIL_CALL_hello(TAIL_CALL_PARAMS)
+{
+    EGGS();
+    if (x) {
+        TAIL_CALL(baz);
+    }
+    DISPATCH();
+}
+
+
+Py_PRESERVE_NONE_CC static PyObject *_TAIL_CALL_OP(TAIL_CALL_PARAMS) {
+    {
+        frame->instr_ptr = next_instr;
+        next_instr += 1;
+        INSTRUCTION_STATS(OP);
+        SPAM();
+    }
+    DISPATCH();
+    hello:
+    TAIL_CALL(hello);
+}
+        """
+        output_labels = """
+hello:
+        {
+            EGGS();
+            if (x) {
+                goto baz;
+            }
+            return _TAIL_CALL_entry(frame, stack_pointer, tstate, next_instr, 0, 0);
+        }
+        """
+        self.run_cases_test(input, output, output_labels)
+
 
 class TestGeneratedAbstractCases(unittest.TestCase):
     def setUp(self) -> None:
