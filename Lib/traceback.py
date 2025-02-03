@@ -3,6 +3,7 @@
 import collections.abc
 import itertools
 import linecache
+import os
 import sys
 import textwrap
 import warnings
@@ -177,21 +178,43 @@ def format_exception_only(exc, /, value=_sentinel, *, show_group=False, **kwargs
     return list(te.format_exception_only(show_group=show_group, colorize=colorize))
 
 
+_TIMESTAMP_FORMAT = os.environ.get("PYTHON_TRACEBACK_TIMESTAMPS", "")
+match _TIMESTAMP_FORMAT:
+    case "us" | "1":
+        def _timestamp_formatter(ns):
+            return f"<@{ns/1e9:.6f}>"
+    case "ns":
+        def _timestamp_formatter(ns):
+            return f"<@{ns}ns>"
+    case "iso":
+        def _timestamp_formatter(ns):
+            from datetime import datetime
+            return f"<@{datetime.fromtimestamp(ns/1e9).isoformat()}>"
+    case _:
+        _TIMESTAMP_FORMAT = ""
+
+
 # -- not official API but folk probably use these two functions.
 
-def _format_final_exc_line(etype, value, *, insert_final_newline=True, colorize=False):
+def _format_final_exc_line(etype, value, *, insert_final_newline=True, colorize=False, timestamp_ns=0):
     valuestr = _safe_string(value, 'exception')
-    end_char = "\n" if insert_final_newline else ""
+    try:
+        ts = _timestamp_formatter(timestamp_ns) if timestamp_ns else ""
+    except Exception:
+        ts = ""
+    end = f"\n" if insert_final_newline else ""
     if colorize:
+        end = f" {ANSIColors.GREY}{ts}{ANSIColors.RESET}{end}" if ts else end
         if value is None or not valuestr:
-            line = f"{ANSIColors.BOLD_MAGENTA}{etype}{ANSIColors.RESET}{end_char}"
+            line = f"{ANSIColors.BOLD_MAGENTA}{etype}{ANSIColors.RESET}{end}"
         else:
-            line = f"{ANSIColors.BOLD_MAGENTA}{etype}{ANSIColors.RESET}: {ANSIColors.MAGENTA}{valuestr}{ANSIColors.RESET}{end_char}"
+            line = f"{ANSIColors.BOLD_MAGENTA}{etype}{ANSIColors.RESET}: {ANSIColors.MAGENTA}{valuestr}{ANSIColors.RESET}{end}"
     else:
+        end = f" {ts}{end}" if ts else end
         if value is None or not valuestr:
-            line = f"{etype}{end_char}"
+            line = f"{etype}{end}"
         else:
-            line = f"{etype}: {valuestr}{end_char}"
+            line = f"{etype}: {valuestr}{end}"
     return line
 
 
@@ -1004,10 +1027,12 @@ class TracebackException:
 
     - :attr:`__cause__` A TracebackException of the original *__cause__*.
     - :attr:`__context__` A TracebackException of the original *__context__*.
+    - :attr:`__notes__` A reference to the original *__notes__* list.
     - :attr:`exceptions` For exception groups - a list of TracebackException
       instances for the nested *exceptions*.  ``None`` for other exceptions.
     - :attr:`__suppress_context__` The *__suppress_context__* value from the
       original exception.
+    - :attr:`_timestamp_ns` When the exception was created if enabled, or 0.
     - :attr:`stack` A `StackSummary` representing the traceback.
     - :attr:`exc_type` (deprecated) The class of the original traceback.
     - :attr:`exc_type_str` String display of exc_type
@@ -1057,6 +1082,7 @@ class TracebackException:
             self.__notes__ = [
                 f'Ignored error getting __notes__: {_safe_string(e, '__notes__', repr)}']
 
+        self._timestamp_ns = exc_value.__timestamp_ns__ if _TIMESTAMP_FORMAT else 0
         self._is_syntax_error = False
         self._have_exc_type = exc_type is not None
         if exc_type is not None:
@@ -1228,7 +1254,7 @@ class TracebackException:
 
         indent = 3 * _depth * ' '
         if not self._have_exc_type:
-            yield indent + _format_final_exc_line(None, self._str, colorize=colorize)
+            yield indent + _format_final_exc_line(None, self._str, colorize=colorize, timestamp_ns=self._timestamp_ns)
             return
 
         stype = self.exc_type_str
@@ -1236,14 +1262,14 @@ class TracebackException:
             if _depth > 0:
                 # Nested exceptions needs correct handling of multiline messages.
                 formatted = _format_final_exc_line(
-                    stype, self._str, insert_final_newline=False, colorize=colorize
+                    stype, self._str, insert_final_newline=False, colorize=colorize, timestamp_ns=self._timestamp_ns
                 ).split('\n')
                 yield from [
                     indent + l + '\n'
                     for l in formatted
                 ]
             else:
-                yield _format_final_exc_line(stype, self._str, colorize=colorize)
+                yield _format_final_exc_line(stype, self._str, colorize=colorize, timestamp_ns=self._timestamp_ns)
         else:
             yield from [indent + l for l in self._format_syntax_error(stype, colorize=colorize)]
 
