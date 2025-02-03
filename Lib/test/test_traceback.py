@@ -4491,6 +4491,16 @@ class SuggestionFormattingTestBase:
         actual = self.get_suggestion(instance.foo)
         self.assertNotIn("self.blech", actual)
 
+    def test_name_error_with_getattr(self):
+        class A:
+            def __getattr__(self, x):
+                print(x)
+                print(qq)
+        instance = A()
+        actual = self.get_suggestion(instance, "pop")
+        self.assertIn("name 'qq' is not defined", actual)
+        self.assertEqual(actual.count("NameError"), 1)
+
     def test_unbound_local_error_does_not_match(self):
         def func():
             something = 3
